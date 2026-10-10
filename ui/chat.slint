@@ -1,0 +1,768 @@
+// The conversation window: one tab per open conversation, as in Pidgin.
+// Only the active tab's thread is held in the window; the others live in Rust.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Tr, Icons } from "theme.slint";
+import { Avatar, UnreadDot, IconButton, PillButton, Field, Check } from "widgets.slint";
+import { Bubble, BubbleView, FileCard } from "bubble.slint";
+import { Picker, Members, Prompt, PictureView, PickRow, MemberRow } from "overlays.slint";
+
+export { Bubble, FileCard, PickRow, MemberRow }
+
+export struct TabInfo {
+    key: string,
+    title: string,
+    letters: string,
+    color: color,
+    avatar: image,
+    has-avatar: bool,
+    group: bool,
+    unread: bool,
+}
+
+component Tab inherits Rectangle {
+    in property <TabInfo> tab;
+    in property <bool> active;
+    callback selected;
+    callback closed;
+    height: 34px;
+    width: min(190px, max(110px, content.preferred-width));
+    background: active ? Theme.surface : touch.has-hover ? Theme.menu-hover : transparent;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.selected(); }
+        // The middle button closes a tab, as everywhere.
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.middle && event.kind == PointerEventKind.up) {
+                root.closed();
+            }
+        }
+    }
+    if active: Rectangle {
+        y: 0;
+        height: 2px;
+        background: Theme.gold;
+    }
+    content := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 4px;
+        spacing: 6px;
+        VerticalLayout {
+            alignment: center;
+            Avatar {
+                size: 20px;
+                letters: tab.letters;
+                fill: tab.color;
+                picture: tab.avatar;
+                has-picture: tab.has-avatar;
+                group: tab.group;
+            }
+        }
+        Text {
+            text: tab.title;
+            color: Theme.text;
+            font-size: Theme.small;
+            font-weight: tab.unread ? 700 : active ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        if tab.unread: VerticalLayout {
+            alignment: center;
+            UnreadDot { }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.close;
+                size: 20px;
+                tip: Tr.t("app.closeTab");
+                clicked => { root.closed(); }
+            }
+        }
+    }
+}
+
+export component ChatWindow inherits Window {
+    title: head-title == "" ? Tr.t("app.title") : head-title + " – " + Tr.t("app.title");
+    icon: Icons.app;
+    preferred-width: 620px;
+    preferred-height: 640px;
+    min-width: 380px;
+    min-height: 320px;
+    background: Theme.bg;
+    default-font-family: "Open Sans";
+    default-font-size: Theme.font;
+
+    // --- tabs ---
+    in property <[TabInfo]> tabs;
+    in property <string> active-key;
+    callback tab-selected(key: string);
+    callback tab-closed(key: string);
+
+    // --- head of the active conversation ---
+    in property <string> head-title;
+    in property <string> head-sub;
+    in property <string> head-meta;
+    in property <string> head-letters;
+    in property <color> head-color;
+    in property <image> head-avatar;
+    in property <bool> head-has-avatar;
+    in property <bool> is-group;
+    in property <bool> muted;
+    in property <bool> can-mute;
+    in property <bool> favorite;
+    in property <bool> can-send-gradido;
+    callback toggle-mute();
+    callback toggle-favorite();
+    callback open-members();
+    callback send-gradido();
+
+    // --- thread ---
+    // 0 loading, 1 not reachable, 2 empty, 3 there
+    in property <int> thread-state;
+    in property <[Bubble]> bubbles;
+    in property <bool> can-load-older;
+    in property <bool> loading-older;
+    in property <int> jump-seq;
+    in property <int> jump-id;
+    callback load-older();
+    callback reply(id: int);
+    callback edit(id: int);
+    callback forward(id: int);
+    callback copy(id: int);
+    callback quote-clicked(id: int);
+    callback link(url: string);
+    callback image-clicked(id: int);
+    callback writer-clicked(key: string);
+
+    // --- writing ---
+    in-out property <string> draft;
+    in property <string> placeholder;
+    in property <bool> sending;
+    in property <string> strip-title;
+    in property <string> strip-text;
+    // 0 none, 1 answering, 2 editing
+    in property <int> strip;
+    in property <string> check-label;
+    in-out property <bool> check;
+    in property <string> banner;
+    in property <bool> quick-answers;
+    in property <string> compose-error;
+    in property <string> remaining;
+    callback send();
+    callback cancel-strip();
+    callback quick(text: string);
+    callback draft-edited();
+    // Read by Rust: nobody is looking at a window that does not have the keyboard.
+    out property <bool> has-keyboard: compose.has-focus || search-field.has-focus;
+    callback attention();
+    changed has-keyboard => {
+        if (has-keyboard) {
+            root.attention();
+        }
+    }
+
+    // --- search in the thread ---
+    in-out property <bool> search-open;
+    in-out property <string> search-text;
+    in property <string> search-count;
+    callback search-edited(text: string);
+    callback search-step(older: bool);
+
+    // --- layers ---
+    // 0 none, 1 picker, 2 members, 3 question, 4 picture
+    in property <int> layer;
+    callback layer-closed();
+    in property <string> layer-title;
+    in property <string> layer-error;
+    in property <bool> layer-busy;
+    in property <[PickRow]> pick-rows;
+    in property <string> pick-hint;
+    in-out property <string> pick-search;
+    in property <bool> pick-with-name;
+    in-out property <string> pick-name;
+    in property <bool> pick-with-words;
+    in-out property <string> pick-words;
+    in property <string> pick-check-label;
+    in-out property <bool> pick-check;
+    in property <string> pick-go;
+    in property <bool> pick-go-enabled;
+    callback pick-toggle(key: string);
+    callback pick-search-edited(text: string);
+    callback pick-go-clicked();
+    in property <[MemberRow]> member-rows;
+    in property <bool> members-loading;
+    in property <bool> may-manage;
+    callback members-add();
+    callback members-rename();
+    callback members-leave();
+    callback members-moderator(key: string, on: bool);
+    callback members-remove(key: string);
+    callback members-open(key: string);
+    in property <string> ask-body;
+    in property <bool> ask-with-text;
+    in-out property <string> ask-text;
+    in property <string> ask-go;
+    in property <bool> ask-danger;
+    callback ask-go-clicked();
+    in property <image> view-picture;
+    in property <string> view-caption;
+
+    in property <string> toast;
+
+    // --- scrolling, driven from Rust ---
+    property <length> held-height;
+    public function scroll-to-bottom() {
+        scroller.content-y = min(0px, scroller.visible-height - scroller.content-height);
+    }
+    // Older messages come in above: the ones on screen must not move.
+    public function hold-position() {
+        held-height = scroller.content-height;
+    }
+    public function restore-position() {
+        scroller.content-y = min(0px, max(scroller.visible-height - scroller.content-height, scroller.content-y - (scroller.content-height - held-height)));
+        // Asked twice, it moves once.
+        held-height = scroller.content-height;
+    }
+    // Slint has no clipboard call for Rust: an unseen input does the copying.
+    public function copy-text(text: string) {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+    }
+    out property <bool> at-bottom: scroller.content-y <= scroller.visible-height - scroller.content-height + 60px;
+    public function focus-compose() {
+        compose.focus();
+    }
+
+    clipboard := TextInput {
+        visible: false;
+        width: 0px;
+        height: 0px;
+    }
+
+    VerticalLayout {
+        // Tabs.
+        Rectangle {
+            height: 36px;
+            background: Theme.surface-muted;
+            Flickable {
+                content-width: max(self.width, strip-row.preferred-width);
+                strip-row := HorizontalLayout {
+                    padding-left: 6px;
+                    padding-top: 2px;
+                    spacing: 2px;
+                    alignment: start;
+                    for tab in tabs: Tab {
+                        tab: tab;
+                        active: tab.key == active-key;
+                        selected => { root.tab-selected(tab.key); }
+                        closed => { root.tab-closed(tab.key); }
+                    }
+                }
+            }
+        }
+
+        if active-key == "": Rectangle {
+            vertical-stretch: 1;
+            background: Theme.surface;
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                HorizontalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.chat;
+                        colorize: Theme.text-muted;
+                        width: 48px;
+                        height: 48px;
+                    }
+                }
+                Text {
+                    text: Tr.t("app.pickOne");
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // Head.
+        if active-key != "": Rectangle {
+            background: Theme.surface;
+            height: head.preferred-height;
+            head := HorizontalLayout {
+                padding: 10px;
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    Avatar {
+                        size: 44px;
+                        letters: head-letters;
+                        fill: head-color;
+                        picture: head-avatar;
+                        has-picture: head-has-avatar;
+                        group: is-group;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    spacing: 1px;
+                    Text {
+                        text: head-title;
+                        color: Theme.text;
+                        font-size: 16px;
+                        font-weight: 700;
+                        overflow: elide;
+                    }
+                    if head-sub != "": Text {
+                        text: head-sub;
+                        color: Theme.text-muted;
+                        font-size: Theme.small;
+                        overflow: elide;
+                    }
+                    if head-meta != "": Text {
+                        text: head-meta;
+                        color: Theme.text-muted;
+                        font-size: Theme.tiny;
+                        overflow: elide;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 2px;
+                    alignment: end;
+                    if can-send-gradido: VerticalLayout {
+                        alignment: center;
+                        padding-right: 6px;
+                        PillButton {
+                            height: 28px;
+                            text: Tr.t("contacts.sendGradido");
+                            clicked => { root.send-gradido(); }
+                        }
+                    }
+                    if is-group: VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: Icons.members;
+                            tip: Tr.t("chatGroup.members");
+                            clicked => { root.open-members(); }
+                        }
+                    }
+                    if can-mute: VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: muted ? Icons.bell-off : Icons.bell;
+                            active: muted;
+                            tip: muted ? Tr.t("chatGroup.muted") : "";
+                            clicked => { root.toggle-mute(); }
+                        }
+                    }
+                    if !is-group: VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: favorite ? Icons.heart : Icons.heart-outline;
+                            tint: favorite ? Theme.heart : Theme.text-muted;
+                            tip: Tr.t("contacts.favorites");
+                            clicked => { root.toggle-favorite(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: Icons.magnify;
+                            active: root.search-open;
+                            tip: Tr.t("chatSearch.open");
+                            clicked => {
+                                root.search-open = !root.search-open;
+                                if (root.search-open) {
+                                    search-field.focus-input();
+                                } else {
+                                    root.search-text = "";
+                                    root.search-edited("");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search.
+        Rectangle {
+            visible: active-key != "" && root.search-open;
+            height: self.visible ? 42px : 0px;
+            background: Theme.surface;
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                padding-bottom: 8px;
+                spacing: 6px;
+                search-field := Field {
+                    pill: true;
+                    text <=> root.search-text;
+                    placeholder: Tr.t("chatSearch.placeholder");
+                    edited(text) => { root.search-edited(text); }
+                    accepted => { root.search-step(true); }
+                    escaped => {
+                        root.search-open = false;
+                        root.search-text = "";
+                        root.search-edited("");
+                    }
+                }
+                Text {
+                    text: search-count;
+                    color: Theme.text-muted;
+                    font-size: Theme.small;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.up;
+                        tip: Tr.t("chatSearch.older");
+                        clicked => { root.search-step(true); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.down;
+                        tip: Tr.t("chatSearch.newer");
+                        clicked => { root.search-step(false); }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            visible: active-key != "";
+            height: self.visible ? 1px : 0px;
+            background: Theme.border;
+        }
+
+        // Thread.
+        Rectangle {
+            visible: active-key != "";
+            vertical-stretch: active-key != "" ? 1 : 0;
+            background: Theme.surface;
+            clip: true;
+            if thread-state != 3: VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                if thread-state == 2: HorizontalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.chat;
+                        colorize: Theme.text-muted;
+                        width: 40px;
+                        height: 40px;
+                    }
+                }
+                Text {
+                    text: thread-state == 0 ? "…" : thread-state == 1 ? Tr.t("chatThread.notReachable") : is-group ? Tr.t("chatGroup.empty") : Tr.t("chatThread.empty");
+                    color: thread-state == 1 ? Theme.danger : Theme.text-muted;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            scroller := ScrollView {
+                visible: thread-state == 3;
+                VerticalLayout {
+                    width: scroller.visible-width;
+                    alignment: start;
+                    padding-top: 6px;
+                    padding-bottom: 8px;
+                    if can-load-older: HorizontalLayout {
+                        alignment: center;
+                        padding: 6px;
+                        PillButton {
+                            primary: false;
+                            height: 28px;
+                            text: loading-older ? "…" : Tr.t("chatThread.loadOlder");
+                            enabled: !loading-older;
+                            clicked => { root.load-older(); }
+                        }
+                    }
+                    for b in bubbles: BubbleView {
+                        b: b;
+                        available: scroller.visible-width;
+                        group: is-group;
+                        jump-seq: root.jump-seq;
+                        jump-id: root.jump-id;
+                        reply => { root.reply(b.id); }
+                        edit => { root.edit(b.id); }
+                        forward => { root.forward(b.id); }
+                        copy => { root.copy(b.id); }
+                        quote-clicked => { root.quote-clicked(b.quote-id); }
+                        link(url) => { root.link(url); }
+                        image-clicked => { root.image-clicked(b.id); }
+                        writer-clicked => { root.writer-clicked(b.writer-key); }
+                        here(y, height) => {
+                            // The bubble meant comes to the middle of what is visible.
+                            scroller.content-y = min(0px, max(scroller.visible-height - scroller.content-height, -(y + height / 2 - scroller.visible-height / 2)));
+                        }
+                    }
+                }
+            }
+            if toast != "": Rectangle {
+                y: parent.height - self.height - 10px;
+                width: min(parent.width - 24px, toast-text.preferred-width + 28px);
+                height: toast-text.preferred-height + 14px;
+                border-radius: 15px;
+                background: Theme.text;
+                toast-text := Text {
+                    width: parent.width - 28px;
+                    text: toast;
+                    color: Theme.surface;
+                    font-size: Theme.small;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        // Writing.
+        Rectangle {
+            visible: active-key != "";
+            height: self.visible ? writing.preferred-height : 0px;
+            background: Theme.surface;
+            Rectangle {
+                y: 0;
+                height: 1px;
+                background: Theme.border;
+            }
+            writing := VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+                if banner != "": Rectangle {
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.gold;
+                    background: Theme.gold.with-alpha(0.12);
+                    height: banner-text.preferred-height + 12px;
+                    banner-text := Text {
+                        x: 10px;
+                        width: parent.width - 20px;
+                        text: banner;
+                        color: Theme.text;
+                        font-size: Theme.small;
+                        wrap: word-wrap;
+                    }
+                }
+                if quick-answers: HorizontalLayout {
+                    alignment: start;
+                    spacing: 6px;
+                    for answer in [Tr.t("chatHello.backHello"), Tr.t("chatHello.backMore")]: PillButton {
+                        primary: false;
+                        height: 28px;
+                        text: answer;
+                        clicked => { root.quick(answer); }
+                    }
+                }
+                if strip != 0: Rectangle {
+                    height: 42px;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface-muted;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 4px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Image {
+                                source: strip == 1 ? Icons.reply : Icons.pencil;
+                                colorize: Theme.menu-icon;
+                                width: 18px;
+                                height: 18px;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: strip-title;
+                                color: Theme.text;
+                                font-size: Theme.small;
+                                font-weight: 600;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: strip-text;
+                                color: Theme.text-muted;
+                                font-size: Theme.small;
+                                overflow: elide;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            IconButton {
+                                icon: Icons.close;
+                                size: 26px;
+                                tip: strip == 1 ? Tr.t("chatThread.replyCancel") : Tr.t("chatThread.editCancel");
+                                clicked => { root.cancel-strip(); }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: clamp(compose.preferred-height + 16px, 38px, 150px);
+                        border-radius: 19px;
+                        border-width: 1px;
+                        border-color: compose.has-focus ? Theme.success : Theme.border;
+                        background: Theme.surface;
+                        clip: true;
+                        if root.draft == "": Text {
+                            x: 14px;
+                            width: parent.width - 28px;
+                            text: strip == 2 ? Tr.t("chatThread.editPlaceholder") : placeholder;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        field := Flickable {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            content-height: max(self.height, compose.preferred-height);
+                            compose := TextInput {
+                                width: parent.width;
+                                single-line: false;
+                                wrap: word-wrap;
+                                color: Theme.text;
+                                font-size: Theme.font;
+                                text <=> root.draft;
+                                edited => { root.draft-edited(); }
+                                // The line being written stays in sight.
+                                cursor-position-changed(at) => {
+                                    if (at.y + 22px > field.height - field.content-y) {
+                                        field.content-y = field.height - at.y - 22px;
+                                    } else if (at.y < -field.content-y) {
+                                        field.content-y = -at.y;
+                                    }
+                                }
+                                key-pressed(event) => {
+                                    // Enter sends, as a messenger does; Shift+Enter breaks the line.
+                                    if (event.text == Key.Return && !event.modifiers.shift) {
+                                        root.send();
+                                        return accept;
+                                    }
+                                    if (event.text == Key.Escape && strip != 0) {
+                                        root.cancel-strip();
+                                        return accept;
+                                    }
+                                    return reject;
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: end;
+                        Rectangle {
+                            width: 38px;
+                            height: 38px;
+                            border-radius: 19px;
+                            background: strip == 2 ? Theme.success : Theme.gold-fill;
+                            opacity: sending || root.draft == "" ? 0.45 : send-touch.pressed ? 0.8 : 1;
+                            accessible-role: button;
+                            accessible-label: strip == 2 ? Tr.t("chatThread.editSave") : Tr.t("chatThread.send");
+                            Image {
+                                source: strip == 2 ? Icons.check : Icons.send;
+                                colorize: white;
+                                width: 20px;
+                                height: 20px;
+                            }
+                            send-touch := TouchArea {
+                                enabled: !sending && root.draft != "";
+                                mouse-cursor: pointer;
+                                clicked => { root.send(); }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 10px;
+                    if check-label != "" && strip != 2: Check {
+                        text: check-label;
+                        checked <=> root.check;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    if remaining != "": Text {
+                        text: remaining;
+                        color: Theme.text-muted;
+                        font-size: Theme.tiny;
+                        vertical-alignment: center;
+                    }
+                }
+                if compose-error != "": Text {
+                    text: compose-error;
+                    color: Theme.danger;
+                    font-size: Theme.small;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    if layer == 1: Picker {
+        title: layer-title;
+        rows: pick-rows;
+        hint: pick-hint;
+        error: layer-error;
+        busy: layer-busy;
+        search <=> root.pick-search;
+        search-placeholder: pick-with-words ? Tr.t("chatForward.search") : Tr.t("chatGroup.pickSearch");
+        with-name: pick-with-name;
+        name-placeholder: Tr.t("chatGroup.namePlaceholder");
+        name <=> root.pick-name;
+        with-words: pick-with-words;
+        words <=> root.pick-words;
+        check-label: pick-check-label;
+        check <=> root.pick-check;
+        go-label: pick-go;
+        go-enabled: pick-go-enabled && (!pick-with-name || root.pick-name != "");
+        toggle(key) => { root.pick-toggle(key); }
+        search-edited(text) => { root.pick-search-edited(text); }
+        go => { root.pick-go-clicked(); }
+        closed => { root.layer-closed(); }
+    }
+    if layer == 2: Members {
+        title: layer-title;
+        rows: member-rows;
+        loading: members-loading;
+        may-manage: root.may-manage;
+        error: layer-error;
+        add => { root.members-add(); }
+        rename => { root.members-rename(); }
+        leave => { root.members-leave(); }
+        moderator(key, on) => { root.members-moderator(key, on); }
+        remove(key) => { root.members-remove(key); }
+        open(key) => { root.members-open(key); }
+        closed => { root.layer-closed(); }
+    }
+    if layer == 3: Prompt {
+        title: layer-title;
+        body: ask-body;
+        with-text: ask-with-text;
+        text <=> root.ask-text;
+        go-label: ask-go;
+        danger: ask-danger;
+        error: layer-error;
+        busy: layer-busy;
+        go => { root.ask-go-clicked(); }
+        closed => { root.layer-closed(); }
+    }
+    if layer == 4: PictureView {
+        picture: view-picture;
+        caption: view-caption;
+        closed => { root.layer-closed(); }
+    }
+}

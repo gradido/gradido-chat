@@ -1,0 +1,416 @@
+// One entry of a thread: a day line, a message, or a transfer.
+// Shapes and colours follow frontend/src/components/Chat/ChatBubble.vue.
+
+import { Theme, Tr, Icons } from "theme.slint";
+import { Avatar, IconButton } from "widgets.slint";
+
+export struct FileCard {
+    service: string,
+    label: string,
+    url: string,
+}
+
+export struct Bubble {
+    // 0 day line, 1 message, 2 transfer
+    kind: int,
+    id: int,
+    day: string,
+    mine: bool,
+    // Group threads: who wrote, shown at the start of a run.
+    writer: string,
+    writer-key: string,
+    show-writer: bool,
+    indent: bool,
+    letters: string,
+    color: color,
+    avatar: image,
+    has-avatar: bool,
+    announcement: bool,
+    forwarded: string,
+    has-quote: bool,
+    quote-id: int,
+    quote-name: string,
+    quote-text: string,
+    quote-picture: bool,
+    subject: string,
+    lines: [styled-text],
+    files: [FileCard],
+    // 0 none, 1 loading, 2 there, 3 not available
+    image-state: int,
+    image: image,
+    image-ratio: float,
+    motif: string,
+    greeting: string,
+    time: string,
+    edited: bool,
+    mailed: bool,
+    note: string,
+    can-reply: bool,
+    can-edit: bool,
+    // The search hit the member stands on.
+    hit: bool,
+    // Being answered or edited, or just jumped to.
+    ring: bool,
+}
+
+component Motif inherits Image {
+    in property <string> key;
+    source: key == "heart-leaves" ? @image-url("../assets/motifs/heart-leaves.svg")
+        : key == "giving-hands" ? @image-url("../assets/motifs/giving-hands.svg")
+        : key == "bouquet" ? @image-url("../assets/motifs/bouquet.svg")
+        : key == "glowing-swirl" ? @image-url("../assets/motifs/glowing-swirl.svg")
+        : @image-url("../assets/motifs/morning-light.svg");
+    image-fit: contain;
+}
+
+component FileCardView inherits Rectangle {
+    in property <FileCard> file;
+    callback opened;
+    height: 48px;
+    min-width: 200px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: touch.has-hover ? Theme.gold : Theme.border;
+    background: Theme.surface;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.opened(); }
+    }
+    HorizontalLayout {
+        padding: 6px;
+        spacing: 8px;
+        Rectangle {
+            width: 36px;
+            border-radius: 8px;
+            background: Theme.surface-muted;
+            Image {
+                source: Icons.file;
+                colorize: Theme.gold;
+                width: 22px;
+                height: 22px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: file.service;
+                color: Theme.text;
+                font-weight: 600;
+                font-size: Theme.small;
+                overflow: elide;
+            }
+            Text {
+                text: file.label;
+                color: Theme.text-muted;
+                font-size: Theme.tiny;
+                overflow: elide;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.open;
+                colorize: Theme.text-muted;
+                width: 16px;
+                height: 16px;
+            }
+        }
+    }
+}
+
+export component BubbleView inherits VerticalLayout {
+    in property <Bubble> b;
+    in property <bool> group;
+    // Rises whenever the thread wants to jump; the bubble meant answers with its place.
+    in property <int> jump-seq;
+    in property <int> jump-id;
+    callback reply;
+    callback edit;
+    callback forward;
+    callback copy;
+    callback quote-clicked;
+    callback link(url: string);
+    callback image-clicked;
+    callback writer-clicked;
+    callback here(y: length, height: length);
+
+    property <length> gutter: group ? 42px : 0px;
+    // Given from outside: asking the own width here would make the layout chase its tail.
+    in property <length> available;
+    property <length> widest: (available - gutter - 24px) * 0.8;
+    changed jump-seq => {
+        if (b.kind == 1 && b.id == jump-id) {
+            root.here(self.y, self.height);
+        }
+    }
+
+    if b.kind == 0: Text {
+        text: b.day;
+        color: Theme.text-muted;
+        font-size: Theme.tiny;
+        horizontal-alignment: center;
+        height: 30px;
+        vertical-alignment: center;
+    }
+
+    if b.kind != 0: HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: b.show-writer ? 8px : 2px;
+        padding-bottom: 2px;
+        spacing: 6px;
+        alignment: b.mine ? end : start;
+
+        if group && !b.mine: VerticalLayout {
+            alignment: start;
+            width: 36px;
+            if b.show-writer: Avatar {
+                size: 36px;
+                letters: b.letters;
+                fill: b.color;
+                picture: b.avatar;
+                has-picture: b.has-avatar;
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.writer-clicked(); }
+                }
+            }
+        }
+
+        if b.mine && b.kind == 1: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.dots;
+                size: 26px;
+                opacity: hover.has-hover || self.hovered ? 1 : 0;
+                tip: Tr.t("chatThread.menuMore");
+                clicked => { menu.show({ x: 0px, y: 0px }); }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            alignment: start;
+            if b.show-writer && !b.mine: Text {
+                text: b.writer;
+                color: Theme.text-muted;
+                font-size: Theme.small;
+                font-weight: 600;
+                horizontal-alignment: left;
+            }
+            HorizontalLayout {
+                alignment: b.mine ? end : start;
+                menu := ContextMenuArea {
+                    enabled: b.kind == 1;
+                    Menu {
+                        if b.can-reply: MenuItem {
+                            title: Tr.t("chatThread.reply");
+                            icon: Icons.reply;
+                            activated => { root.reply(); }
+                        }
+                        if b.can-edit: MenuItem {
+                            title: Tr.t("chatThread.edit");
+                            icon: Icons.pencil;
+                            activated => { root.edit(); }
+                        }
+                        if b.can-reply: MenuItem {
+                            title: Tr.t("chatThread.forward");
+                            icon: Icons.share-outline;
+                            activated => { root.forward(); }
+                        }
+                        MenuItem {
+                            title: Tr.t("chatThread.copyText");
+                            icon: Icons.copy;
+                            activated => { root.copy(); }
+                        }
+                    }
+
+                    Rectangle {
+                        max-width: max(root.widest, 120px);
+                        border-radius: 16px;
+                        border-bottom-left-radius: b.mine ? 16px : 5px;
+                        border-bottom-right-radius: b.mine ? 5px : 16px;
+                        border-width: b.hit || b.ring ? 2px : 1px;
+                        border-color: b.hit ? Theme.mark : b.ring ? Theme.success : b.mine ? Theme.gold : transparent;
+                        background: b.mine ? Theme.own-bubble : Theme.surface-muted;
+                        hover := TouchArea { }
+                        VerticalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            padding-top: 7px;
+                            padding-bottom: 5px;
+                            spacing: 3px;
+
+                            if b.announcement: HorizontalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    border-radius: 9px;
+                                    border-width: 1px;
+                                    border-color: Theme.gold;
+                                    height: 18px;
+                                    width: pill.preferred-width + 14px;
+                                    pill := Text {
+                                        text: Tr.t("chatGroup.announcement");
+                                        font-size: Theme.tiny;
+                                        color: Theme.text;
+                                    }
+                                }
+                            }
+                            if b.forwarded != "": HorizontalLayout {
+                                alignment: start;
+                                spacing: 4px;
+                                Image {
+                                    source: Icons.share;
+                                    colorize: Theme.text-muted;
+                                    width: 14px;
+                                    height: 14px;
+                                }
+                                Text {
+                                    text: b.forwarded;
+                                    color: Theme.text-muted;
+                                    font-size: Theme.small;
+                                    font-italic: true;
+                                }
+                            }
+                            if b.has-quote: Rectangle {
+                                height: 34px;
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.quote-clicked(); }
+                                }
+                                Rectangle {
+                                    x: 0;
+                                    width: 3px;
+                                    border-radius: 1.5px;
+                                    background: Theme.menu-icon;
+                                }
+                                VerticalLayout {
+                                    padding-left: 9px;
+                                    alignment: center;
+                                    Text {
+                                        text: b.quote-name;
+                                        color: Theme.text;
+                                        font-size: Theme.small;
+                                        font-weight: 600;
+                                        overflow: elide;
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 4px;
+                                        alignment: start;
+                                        if b.quote-picture: Image {
+                                            source: Icons.picture;
+                                            colorize: Theme.text-muted;
+                                            width: 13px;
+                                            height: 13px;
+                                        }
+                                        Text {
+                                            text: b.quote-text;
+                                            color: Theme.text-muted;
+                                            font-size: Theme.small;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                            if b.image-state != 0: Rectangle {
+                                width: 250px;
+                                height: clamp(250px * b.image-ratio, 60px, 340px);
+                                border-radius: 10px;
+                                clip: true;
+                                background: #7f7f7f2e;
+                                if b.image-state == 2: Image {
+                                    source: b.image;
+                                    width: 100%;
+                                    height: 100%;
+                                    image-fit: cover;
+                                }
+                                if b.image-state == 3: Text {
+                                    text: Tr.t("chatThread.imageMissing");
+                                    color: Theme.text-muted;
+                                    font-size: Theme.small;
+                                }
+                                TouchArea {
+                                    enabled: b.image-state == 2;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.image-clicked(); }
+                                }
+                            }
+                            if b.subject != "": Text {
+                                text: b.subject;
+                                color: Theme.text;
+                                font-weight: 700;
+                                wrap: word-wrap;
+                            }
+                            if b.motif != "": Rectangle {
+                                width: 250px;
+                                height: 250px * 25 / 36;
+                                border-radius: 10px;
+                                clip: true;
+                                background: Theme.greeting-paper;
+                                Motif {
+                                    key: b.motif;
+                                    width: 100%;
+                                    height: 100%;
+                                }
+                            }
+                            if b.greeting != "": Text {
+                                text: b.greeting;
+                                color: Theme.greeting-ink;
+                                font-italic: true;
+                                font-size: 16px;
+                                wrap: word-wrap;
+                            }
+                            for line in b.lines: StyledText {
+                                text: line;
+                                default-color: Theme.text;
+                                default-font-size: Theme.font;
+                                link-color: Theme.link;
+                                link-clicked(url) => { root.link(url); }
+                            }
+                            for file in b.files: FileCardView {
+                                file: file;
+                                opened => { root.link(file.url); }
+                            }
+                            HorizontalLayout {
+                                alignment: end;
+                                spacing: 4px;
+                                if b.mailed: Image {
+                                    source: Icons.email;
+                                    colorize: Theme.text-muted;
+                                    width: 12px;
+                                    height: 12px;
+                                    y: 2px;
+                                }
+                                Text {
+                                    text: (b.edited ? Tr.t("chatThread.edited") + " · " : "") + b.time;
+                                    color: Theme.text-muted;
+                                    font-size: Theme.tiny;
+                                    font-italic: false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if b.note != "": Text {
+                text: b.note;
+                color: Theme.text-muted;
+                font-size: Theme.tiny;
+                horizontal-alignment: right;
+                wrap: word-wrap;
+            }
+        }
+
+        if !b.mine && b.kind == 1: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.dots;
+                size: 26px;
+                opacity: hover.has-hover || self.hovered ? 1 : 0;
+                tip: Tr.t("chatThread.menuMore");
+                clicked => { menu.show({ x: 0px, y: 0px }); }
+            }
+        }
+    }
+}

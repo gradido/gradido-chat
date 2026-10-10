@@ -1,0 +1,60 @@
+// The icon in the system's notification area. Desktop only: `src/app.rs`
+// does not create it where `platform::HAS_TRAY` is false.
+
+import { Tr, Icons } from "theme.slint";
+
+export component Tray inherits SystemTrayIcon {
+    in property <bool> unread;
+    in property <string> tip;
+    in-out property <bool> sound;
+    in-out property <bool> notifications;
+    in-out property <bool> stay;
+    callback show-contacts();
+    callback sound-toggled(on: bool);
+    callback notifications-toggled(on: bool);
+    callback stay-toggled(on: bool);
+    callback quit();
+    icon: unread ? @image-url("../assets/gradido-unread.png") : Icons.app;
+    tooltip: tip;
+    title: "Gradido Chat";
+    clicked => { root.show-contacts(); }
+    Menu {
+        MenuItem {
+            title: Tr.t("app.menu.show");
+            activated => { root.show-contacts(); }
+        }
+        MenuSeparator { }
+        MenuItem {
+            title: Tr.t("app.menu.sound");
+            checkable: true;
+            checked: root.sound;
+            activated => {
+                root.sound = !root.sound;
+                root.sound-toggled(root.sound);
+            }
+        }
+        MenuItem {
+            title: Tr.t("app.menu.notify");
+            checkable: true;
+            checked: root.notifications;
+            activated => {
+                root.notifications = !root.notifications;
+                root.notifications-toggled(root.notifications);
+            }
+        }
+        MenuItem {
+            title: Tr.t("app.menu.tray");
+            checkable: true;
+            checked: root.stay;
+            activated => {
+                root.stay = !root.stay;
+                root.stay-toggled(root.stay);
+            }
+        }
+        MenuSeparator { }
+        MenuItem {
+            title: Tr.t("app.menu.quit");
+            activated => { root.quit(); }
+        }
+    }
+}

@@ -1,0 +1,100 @@
+{
+  "de": {
+    "title": "Gradido Chat",
+    "setup": {
+      "intro": "Melde Dich im Browser bei Gradido an und kopiere von dort Dein Token.",
+      "server": "Adresse Deiner Community",
+      "serverPlaceholder": "https://gradido.example",
+      "token": "Token (JWT)",
+      "tokenPlaceholder": "eyJ…",
+      "tokenHint": "Im Browser: Entwicklerwerkzeuge → Konsole → JSON.parse(localStorage['gradido-frontend']).token",
+      "connect": "Verbinden",
+      "connecting": "Verbinde …",
+      "keep": "Token im Schlüsselbund merken",
+      "noKeyring": "Auf diesem Gerät gibt es keinen Schlüsselbund: Das Token gilt nur, solange das Programm läuft.",
+      "failedNetwork": "Der Server ist nicht erreichbar.",
+      "failedToken": "Das Token gilt nicht mehr. Bitte kopiere ein frisches.",
+      "failed": "Das hat nicht geklappt: {reason}"
+    },
+    "menu": {
+      "sound": "Ton bei neuer Nachricht",
+      "notify": "Benachrichtigung bei neuer Nachricht",
+      "tray": "Beim Schließen im Infobereich bleiben",
+      "signOut": "Abmelden",
+      "quit": "Beenden",
+      "show": "Kontakte zeigen",
+      "settings": "Einstellungen"
+    },
+    "offline": "Keine Verbindung – neuer Versuch läuft",
+    "signedInAs": "Angemeldet als {name}",
+    "closeTab": "Gespräch schließen",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "picture": "Bild",
+    "newFrom": "Neue Nachricht von {name}",
+    "newIn": "{name} in {group}",
+    "pickOne": "Wähle links einen Kontakt oder eine Gruppe.",
+    "role": "Rolle",
+    "settings": {
+      "title": "Einstellungen",
+      "close": "Schließen",
+      "appearance": "Erscheinungsbild",
+      "system": "System",
+      "light": "Hell",
+      "dark": "Dunkel",
+      "messages": "Neue Nachrichten",
+      "program": "Programm",
+      "hardware": "Hardware-Beschleunigung",
+      "hardwareHint": "Zeichnet mit der Grafikkarte statt mit dem Prozessor. Gilt ab dem nächsten Start des Programms."
+    }
+  },
+  "en": {
+    "title": "Gradido Chat",
+    "setup": {
+      "intro": "Sign in to Gradido in your browser and copy your token from there.",
+      "server": "Address of your community",
+      "serverPlaceholder": "https://gradido.example",
+      "token": "Token (JWT)",
+      "tokenPlaceholder": "eyJ…",
+      "tokenHint": "In the browser: developer tools → console → JSON.parse(localStorage['gradido-frontend']).token",
+      "connect": "Connect",
+      "connecting": "Connecting …",
+      "keep": "Keep the token in the keyring",
+      "noKeyring": "This device has no keyring: the token lasts only while the program runs.",
+      "failedNetwork": "The server cannot be reached.",
+      "failedToken": "The token is no longer valid. Please copy a fresh one.",
+      "failed": "That did not work: {reason}"
+    },
+    "menu": {
+      "sound": "Sound on a new message",
+      "notify": "Notification on a new message",
+      "tray": "Stay in the tray when closed",
+      "signOut": "Sign out",
+      "quit": "Quit",
+      "show": "Show contacts",
+      "settings": "Settings"
+    },
+    "offline": "No connection – trying again",
+    "signedInAs": "Signed in as {name}",
+    "closeTab": "Close conversation",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "picture": "Picture",
+    "newFrom": "New message from {name}",
+    "newIn": "{name} in {group}",
+    "pickOne": "Pick a contact or a group on the left.",
+    "role": "Role",
+    "settings": {
+      "title": "Settings",
+      "close": "Close",
+      "appearance": "Appearance",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark",
+      "messages": "New messages",
+      "program": "Program",
+      "hardware": "Hardware acceleration",
+      "hardwareHint": "Draws with the graphics card instead of the processor. Applies from the next start of the program."
+    }
+  }
+}

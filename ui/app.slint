@@ -1,0 +1,10 @@
+// Everything Rust instantiates. A phone build would add one more root here
+// that stacks the contact list and the conversation in a single window;
+// the parts (BuddyWindow's pages, ChatWindow's thread and layers) stay as they are.
+
+import { BuddyWindow, BuddyRow } from "buddy.slint";
+import { ChatWindow, TabInfo, Bubble, FileCard, PickRow, MemberRow } from "chat.slint";
+import { Tray } from "tray.slint";
+import { Tr, Theme } from "theme.slint";
+
+export { BuddyWindow, BuddyRow, ChatWindow, TabInfo, Bubble, FileCard, PickRow, MemberRow, Tray, Tr, Theme }

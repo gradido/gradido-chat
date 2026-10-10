@@ -1,0 +1,81 @@
+// The colours and sizes of the web chat (frontend/src/assets/scss/_design-tokens.scss
+// and gradido-template-dark.scss), light and dark.
+
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    // 0 follows the system, 1 light, 2 dark: the member's choice in the settings.
+    // Set on the palette, so the standard widgets (scroll bars, menus) go along.
+    public function choose(scheme: int) {
+        Palette.color-scheme = scheme == 1 ? ColorScheme.light : scheme == 2 ? ColorScheme.dark : ColorScheme.unknown;
+    }
+    // Where nothing is chosen only the palette knows the system's scheme; its paper tells.
+    property <color> paper: Palette.background;
+    out property <bool> dark: paper.to-hsv().value < 0.5;
+    out property <color> bg: dark ? #17181a : #f5f5f5;
+    out property <color> surface: dark ? #2a2c30 : #ffffff;
+    out property <color> surface-muted: dark ? #36383c : #f2f4f6;
+    out property <color> text: dark ? #e4e4e4 : #383838;
+    out property <color> text-muted: dark ? #9a9b9e : #6c757d;
+    out property <color> border: dark ? #34363b : #dee2e6;
+    out property <color> menu-hover: dark ? #43464c : #eef0f3;
+    out property <color> menu-icon: dark ? #e7b45e : #a8732a;
+    out property <color> success: dark ? #46c04a : #047006;
+    out property <color> danger: dark ? #ef5350 : #c62828;
+    out property <color> link: dark ? #3db85f : #047006;
+    // Borders and outlines.
+    out property <color> gold: #c58d38;
+    // Filled, with white on it.
+    out property <color> gold-fill: #c08935;
+    out property <color> own-bubble: dark ? #3a3428 : #f8f1e7;
+    out property <color> heart: #d64550;
+    out property <color> mark: #ffb340;
+    out property <color> greeting-paper: #fbf3de;
+    out property <color> greeting-ink: dark ? #e2b55c : #8a6124;
+    out property <length> font: 14px;
+    out property <length> small: 12px;
+    out property <length> tiny: 11px;
+}
+
+// The strings come from Rust (src/core/i18n.rs). `lang` is read so that every
+// text follows when the language changes.
+export global Tr {
+    in property <string> lang;
+    pure callback lookup(key: string, lang: string) -> string;
+    public pure function t(key: string) -> string {
+        return lookup(key, lang);
+    }
+}
+
+export global Icons {
+    out property <image> chat: @image-url("../assets/icons/chat-outline.svg");
+    out property <image> dots: @image-url("../assets/icons/dots-horizontal.svg");
+    out property <image> dots-vertical: @image-url("../assets/icons/dots-vertical.svg");
+    out property <image> share: @image-url("../assets/icons/share.svg");
+    out property <image> share-outline: @image-url("../assets/icons/share-outline.svg");
+    out property <image> picture: @image-url("../assets/icons/image-outline.svg");
+    out property <image> email: @image-url("../assets/icons/email-outline.svg");
+    out property <image> reply: @image-url("../assets/icons/reply-outline.svg");
+    out property <image> pencil: @image-url("../assets/icons/pencil-outline.svg");
+    out property <image> copy: @image-url("../assets/icons/content-copy.svg");
+    out property <image> send: @image-url("../assets/icons/send.svg");
+    out property <image> check: @image-url("../assets/icons/check.svg");
+    out property <image> close: @image-url("../assets/icons/close.svg");
+    out property <image> magnify: @image-url("../assets/icons/magnify.svg");
+    out property <image> bell: @image-url("../assets/icons/bell-outline.svg");
+    out property <image> bell-off: @image-url("../assets/icons/bell-off-outline.svg");
+    out property <image> heart: @image-url("../assets/icons/heart.svg");
+    out property <image> heart-outline: @image-url("../assets/icons/heart-outline.svg");
+    out property <image> up: @image-url("../assets/icons/chevron-up.svg");
+    out property <image> down: @image-url("../assets/icons/chevron-down.svg");
+    out property <image> plus: @image-url("../assets/icons/plus.svg");
+    out property <image> file: @image-url("../assets/icons/file-document-outline.svg");
+    out property <image> open: @image-url("../assets/icons/open-in-new.svg");
+    out property <image> group: @image-url("../assets/icons/account-group-outline.svg");
+    out property <image> members: @image-url("../assets/icons/account-multiple-outline.svg");
+    out property <image> cog: @image-url("../assets/icons/cog-outline.svg");
+    out property <image> logout: @image-url("../assets/icons/logout.svg");
+    out property <image> sound: @image-url("../assets/icons/volume-high.svg");
+    out property <image> sound-off: @image-url("../assets/icons/volume-off.svg");
+    out property <image> app: @image-url("../assets/gradido.png");
+}

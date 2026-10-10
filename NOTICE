@@ -1,0 +1,16 @@
+Gradido Chat
+Copyright (C) 2026 Gradido Academy - https://www.gradido.net
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3. See LICENSE.
+
+It contains material from other projects, used under their own licenses:
+
+- locales/{de,en,es,fr,nl,tr,it,ru,pt,el}.json, assets/motifs/*.svg,
+  assets/gradido*.png and the GraphQL documents in src/api/documents.rs:
+  copied or derived from Gradido (https://github.com/gradido/gradido),
+  Apache License 2.0.
+- assets/icons/*.svg: Material Design Icons (https://pictogrammers.com),
+  Apache License 2.0.
+- Slint (https://slint.dev), used under GPL-3.0-only.

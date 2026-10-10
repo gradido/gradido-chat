@@ -1,0 +1,205 @@
+import { Theme } from "theme.slint";
+
+// A person or a group: the picture, or two letters on a colour.
+export component Avatar inherits Rectangle {
+    in property <length> size: 36px;
+    in property <string> letters;
+    in property <image> picture;
+    in property <bool> has-picture;
+    in property <bool> group;
+    in property <color> fill;
+    width: size;
+    height: size;
+    border-radius: group ? size * 0.26 : size / 2;
+    background: fill;
+    clip: true;
+    if !has-picture: Text {
+        text: letters;
+        color: white;
+        font-size: size * 0.4;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if has-picture: Image {
+        source: picture;
+        width: 100%;
+        height: 100%;
+        image-fit: cover;
+    }
+}
+
+export component UnreadDot inherits Rectangle {
+    width: 9px;
+    height: 9px;
+    border-radius: 4.5px;
+    background: Theme.gold-fill;
+}
+
+// A round, quiet button with an icon.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> size: 30px;
+    in property <color> tint: Theme.text-muted;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    in property <string> tip;
+    out property <bool> hovered: touch.has-hover;
+    callback clicked;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: active ? Theme.gold.with-alpha(0.18) : touch.has-hover && enabled ? Theme.menu-hover : transparent;
+    border-width: active ? 1px : 0px;
+    border-color: Theme.gold;
+    opacity: enabled ? 1 : 0.45;
+    accessible-role: button;
+    accessible-label: tip;
+    Image {
+        source: icon;
+        colorize: tint;
+        width: size * 0.62;
+        height: size * 0.62;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The filled gold pill, or its outline.
+export component PillButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: true;
+    in property <bool> danger;
+    in property <bool> enabled: true;
+    callback clicked;
+    height: 32px;
+    min-width: label.preferred-width + 28px;
+    horizontal-stretch: 0;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: danger ? Theme.danger : Theme.gold;
+    background: primary ? (danger ? Theme.danger : Theme.gold-fill) : touch.has-hover ? Theme.menu-hover : transparent;
+    opacity: enabled ? (touch.pressed ? 0.8 : 1) : 0.45;
+    accessible-role: button;
+    accessible-label: text;
+    label := Text {
+        text: root.text;
+        color: primary ? white : Theme.text;
+        font-size: Theme.font;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One line of input in the web chat's rounded field.
+export component Field inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder;
+    in property <bool> password;
+    in property <bool> pill;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(text: string);
+    callback accepted;
+    callback escaped;
+    public function focus-input() {
+        input.focus();
+    }
+    height: 34px;
+    border-radius: pill ? self.height / 2 : 8px;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.success : Theme.border;
+    background: Theme.surface;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        Rectangle {
+            clip: true;
+            if input.text == "": Text {
+                x: 0;
+                text: root.placeholder;
+                color: Theme.text-muted;
+                font-size: Theme.font;
+                vertical-alignment: center;
+                height: 100%;
+                overflow: elide;
+                width: 100%;
+            }
+            input := TextInput {
+                x: 0;
+                width: 100%;
+                height: 100%;
+                vertical-alignment: center;
+                single-line: true;
+                font-size: Theme.font;
+                color: Theme.text;
+                input-type: root.password ? InputType.password : InputType.text;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(); }
+                key-pressed(event) => {
+                    if (event.text == Key.Escape) {
+                        root.escaped();
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+    }
+}
+
+// The gold-accented checkbox with its label.
+export component Check inherits Rectangle {
+    in-out property <bool> checked;
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback toggled(checked: bool);
+    height: 22px;
+    opacity: enabled ? 1 : 0.5;
+    accessible-role: checkbox;
+    accessible-label: text;
+    accessible-checked: checked;
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: Theme.gold;
+                background: checked ? Theme.gold-fill : transparent;
+                if checked: Image {
+                    source: @image-url("../assets/icons/check.svg");
+                    colorize: white;
+                    width: 14px;
+                    height: 14px;
+                }
+            }
+        }
+        Text {
+            text: root.text;
+            color: checked ? Theme.text : Theme.text-muted;
+            font-size: Theme.small;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}

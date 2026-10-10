@@ -1,0 +1,461 @@
+// What lies over a conversation for a moment: choosing people, the members
+// of a group, a question, a picture seen large. Kept as layers inside the
+// window, not as windows of their own, so a phone can show them the same way.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Tr, Icons } from "theme.slint";
+import { Avatar, IconButton, PillButton, Field, Check } from "widgets.slint";
+
+export struct PickRow {
+    key: string,
+    // 0 section heading, 1 member, 2 group
+    kind: int,
+    title: string,
+    sub: string,
+    letters: string,
+    color: color,
+    avatar: image,
+    has-avatar: bool,
+    checked: bool,
+    enabled: bool,
+}
+
+export struct MemberRow {
+    key: string,
+    title: string,
+    sub: string,
+    role: string,
+    letters: string,
+    color: color,
+    avatar: image,
+    has-avatar: bool,
+    // 0 nothing, 1 "make moderator", 2 "hand back moderator"
+    moderate: int,
+    removable: bool,
+    me: bool,
+}
+
+component Sheet inherits Rectangle {
+    in property <string> title;
+    in property <length> sheet-width: 380px;
+    callback closed;
+    background: #00000080;
+    // Swallows what would otherwise reach the thread below.
+    TouchArea {
+        clicked => { root.closed(); }
+    }
+    FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.closed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    Rectangle {
+        width: min(root.sheet-width, root.width - 24px);
+        height: min(inner.preferred-height, root.height - 24px);
+        border-radius: 14px;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 28px;
+        drop-shadow-color: #00000038;
+        drop-shadow-offset-y: 8px;
+        TouchArea { }
+        inner := VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+            HorizontalLayout {
+                Text {
+                    text: root.title;
+                    color: Theme.text;
+                    font-size: 16px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                IconButton {
+                    icon: Icons.close;
+                    tip: Tr.t("form.close");
+                    clicked => { root.closed(); }
+                }
+            }
+            @children
+        }
+    }
+}
+
+// Choose contacts and groups: for a new group, new members, forwarding.
+export component Picker inherits Sheet {
+    in property <[PickRow]> rows;
+    in property <string> hint;
+    in property <string> error;
+    in-out property <string> search;
+    in property <string> search-placeholder;
+    in property <bool> with-name;
+    in property <string> name-placeholder;
+    in-out property <string> name;
+    in property <bool> with-words;
+    in-out property <string> words;
+    in property <string> check-label;
+    in-out property <bool> check;
+    in property <string> go-label;
+    in property <bool> go-enabled;
+    in property <bool> busy;
+    callback toggle(key: string);
+    callback search-edited(text: string);
+    callback go;
+
+    if with-name: Field {
+        text <=> root.name;
+        placeholder: root.name-placeholder;
+    }
+    if hint != "": Text {
+        text: hint;
+        color: Theme.text-muted;
+        font-size: Theme.small;
+        wrap: word-wrap;
+    }
+    Field {
+        pill: true;
+        text <=> root.search;
+        placeholder: root.search-placeholder;
+        edited(text) => { root.search-edited(text); }
+    }
+    Rectangle {
+        height: 260px;
+        vertical-stretch: 1;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.border;
+        clip: true;
+        ScrollView {
+            VerticalLayout {
+                alignment: start;
+                for row in rows: Rectangle {
+                    height: row.kind == 0 ? 24px : 44px;
+                    background: row.kind == 0 ? Theme.surface-muted : touch.has-hover && row.enabled ? Theme.menu-hover : transparent;
+                    opacity: row.enabled || row.kind == 0 ? 1 : 0.5;
+                    touch := TouchArea {
+                        enabled: row.kind != 0 && row.enabled;
+                        mouse-cursor: pointer;
+                        clicked => { root.toggle(row.key); }
+                    }
+                    if row.kind == 0: Text {
+                        x: 10px;
+                        text: row.title;
+                        color: Theme.text-muted;
+                        font-size: Theme.tiny;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                    }
+                    if row.kind != 0: HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 16px;
+                                height: 16px;
+                                border-radius: 3px;
+                                border-width: 1px;
+                                border-color: Theme.gold;
+                                background: row.checked ? Theme.gold-fill : transparent;
+                                if row.checked: Image {
+                                    source: Icons.check;
+                                    colorize: white;
+                                    width: 14px;
+                                    height: 14px;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Avatar {
+                                size: 30px;
+                                letters: row.letters;
+                                fill: row.color;
+                                picture: row.avatar;
+                                has-picture: row.has-avatar;
+                                group: row.kind == 2;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: row.title;
+                                color: Theme.text;
+                                font-weight: 600;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: row.sub;
+                                color: Theme.text-muted;
+                                font-size: Theme.tiny;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if with-words: Field {
+        text <=> root.words;
+        placeholder: Tr.t("chatForward.words");
+    }
+    if check-label != "": Check {
+        text: check-label;
+        checked <=> root.check;
+    }
+    if error != "": Text {
+        text: error;
+        color: Theme.danger;
+        font-size: Theme.small;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        PillButton {
+            primary: false;
+            text: Tr.t("form.cancel");
+            clicked => { root.closed(); }
+        }
+        PillButton {
+            text: go-label;
+            enabled: go-enabled && !busy;
+            clicked => { root.go(); }
+        }
+    }
+}
+
+export component Members inherits Sheet {
+    in property <[MemberRow]> rows;
+    in property <bool> loading;
+    in property <bool> may-manage;
+    in property <string> error;
+    callback add;
+    callback rename;
+    callback leave;
+    callback moderator(key: string, on: bool);
+    callback remove(key: string);
+    callback open(key: string);
+    sheet-width: 460px;
+
+    if loading: Text {
+        text: Tr.t("chatGroup.membersLoading");
+        color: Theme.text-muted;
+    }
+    Rectangle {
+        height: 300px;
+        vertical-stretch: 1;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.border;
+        clip: true;
+        ScrollView {
+            VerticalLayout {
+                alignment: start;
+                for row in rows: Rectangle {
+                    height: 46px;
+                    background: touch.has-hover ? Theme.menu-hover : transparent;
+                    touch := TouchArea {
+                        enabled: !row.me;
+                        mouse-cursor: row.me ? default : pointer;
+                        clicked => { root.open(row.key); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 4px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Avatar {
+                                size: 32px;
+                                letters: row.letters;
+                                fill: row.color;
+                                picture: row.avatar;
+                                has-picture: row.has-avatar;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: row.title;
+                                color: Theme.text;
+                                font-weight: 600;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: row.sub;
+                                color: Theme.text-muted;
+                                font-size: Theme.tiny;
+                                overflow: elide;
+                            }
+                        }
+                        if row.role != "": VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                height: 18px;
+                                width: badge.preferred-width + 14px;
+                                border-radius: 9px;
+                                border-width: 1px;
+                                border-color: Theme.gold;
+                                badge := Text {
+                                    text: row.role;
+                                    font-size: Theme.tiny;
+                                    color: Theme.text;
+                                }
+                            }
+                        }
+                        if row.moderate != 0 || row.removable: VerticalLayout {
+                            alignment: center;
+                            area := ContextMenuArea {
+                                width: 28px;
+                                height: 28px;
+                                Menu {
+                                    if row.moderate == 1: MenuItem {
+                                        title: Tr.t("chatGroup.moderatorOn");
+                                        activated => { root.moderator(row.key, true); }
+                                    }
+                                    if row.moderate == 2: MenuItem {
+                                        title: Tr.t("chatGroup.moderatorOff");
+                                        activated => { root.moderator(row.key, false); }
+                                    }
+                                    if row.removable: MenuItem {
+                                        title: Tr.t("chatGroup.remove");
+                                        activated => { root.remove(row.key); }
+                                    }
+                                }
+
+                                IconButton {
+                                    icon: Icons.dots-vertical;
+                                    size: 28px;
+                                    clicked => { area.show({ x: 0px, y: 28px }); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if error != "": Text {
+        text: error;
+        color: Theme.danger;
+        font-size: Theme.small;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        PillButton {
+            primary: false;
+            danger: true;
+            text: Tr.t("chatGroup.leave");
+            clicked => { root.leave(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if may-manage: PillButton {
+            primary: false;
+            text: Tr.t("chatGroup.rename");
+            clicked => { root.rename(); }
+        }
+        if may-manage: PillButton {
+            text: Tr.t("chatGroup.addMembers");
+            clicked => { root.add(); }
+        }
+    }
+}
+
+// A question, with or without a line to fill in.
+export component Prompt inherits Sheet {
+    in property <string> body;
+    in property <bool> with-text;
+    in-out property <string> text;
+    in property <string> go-label;
+    in property <bool> danger;
+    in property <string> error;
+    in property <bool> busy;
+    callback go;
+    sheet-width: 340px;
+    if body != "": Text {
+        text: body;
+        color: Theme.text;
+        wrap: word-wrap;
+    }
+    if with-text: Field {
+        text <=> root.text;
+        accepted => { root.go(); }
+    }
+    if error != "": Text {
+        text: error;
+        color: Theme.danger;
+        font-size: Theme.small;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        PillButton {
+            primary: false;
+            text: Tr.t("form.cancel");
+            clicked => { root.closed(); }
+        }
+        PillButton {
+            text: go-label;
+            danger: root.danger;
+            enabled: !busy && (!with-text || root.text != "");
+            clicked => { root.go(); }
+        }
+    }
+}
+
+export component PictureView inherits Rectangle {
+    in property <image> picture;
+    in property <string> caption;
+    callback closed;
+    background: #0a0a0c;
+    TouchArea {
+        clicked => { root.closed(); }
+    }
+    FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.closed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+        HorizontalLayout {
+            Text {
+                text: caption;
+                color: #f1f0ec;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            IconButton {
+                icon: Icons.close;
+                tint: #f1f0ec;
+                clicked => { root.closed(); }
+            }
+        }
+        Image {
+            source: picture;
+            image-fit: contain;
+            vertical-stretch: 1;
+        }
+    }
+}
